@@ -1,1 +1,21 @@
 key and nonce should be generated in separate .txt documents? 
+
+
+next: need to fix nonce function and add hex or whatever
+
+
+key and nonce need to be converted to and from hex for decrypt and encrypt 
+
+
+fix nonce type in functions 
+
+fix ? and error result type in fucntions 
+
+
+
+quotes removal not working
+
+
+
+
+does the directory currently create a new folder or not 
