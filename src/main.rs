@@ -1,13 +1,7 @@
-use std::fmt::Error;
-use std::fs;
 use std::io::prelude::*;
 use std::io;
-use std::env;
-use std::path;
 use std::path::Path;
 use std::path::PathBuf;
-use aes_gcm::aes::Aes128;
-use rand::prelude::*;
 use aes_gcm::{
     aead::{Aead, AeadCore, KeyInit, OsRng},
     Aes256Gcm, Nonce, Key
@@ -96,15 +90,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    let mut key_input: Option<String> = None;
-    let mut nonce_input: Option<String> = None;
+    // let mut key_input: Option<String> = None;
+    // let mut nonce_input: Option<String> = None;
     let mut key_bytes: Vec<u8> = Vec::new();
     let mut nonce_bytes: Vec<u8> = Vec::new();
 
-    // 3. If decrypt, then ask for key and nonce
+    // id decrypt, interpret key and nonce
     if operation == "decrypt" {
-        key_input = Some(read_user_input("Please enter the key for decryption (Hex/Base64): "));
-        nonce_input = Some(read_user_input("Please enter the nonce for decryption (Hex/Base64): "));
+        let key_input = Some(read_user_input("Please enter the key for decryption (Hex/Base64): "));
+        let nonce_input = Some(read_user_input("Please enter the nonce for decryption (Hex/Base64): "));
 
         // decode key & nonce
         if let Some(n) = &nonce_input {
@@ -167,7 +161,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("encrypted_files found/created successfully");
         }
         Err(e) => {
-            return Err(Box::new(io::Error::new(io::ErrorKind::NotFound, "Could not create/find encrypted_files directory.", )));            
+            return Err(Box::new(e));            
         }
     }
 
@@ -187,12 +181,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("encrypted_files found/created successfully");
                 }
                 Err(e) => {
-                    return Err(Box::new(io::Error::new(io::ErrorKind::NotFound, "Could not create/find encrypted_files/{originalname} directory.", )));            
+                    return Err(Box::new(e));            
                 }
             }            
         }
         Err(e) => {
-            return Err(Box::new(io::Error::new(io::ErrorKind::NotFound, "Could not create encrypted_files/{originalname} directory.", )));              
+            return Err(Box::new(e));              
         }
     }
 
