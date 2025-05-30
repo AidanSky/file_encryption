@@ -11,64 +11,77 @@ use hex;
 use base64::{engine::general_purpose, Engine as _};
 use argon2::Argon2;
 
+const SALT_LENGTH: usize = 16;
+const NONCE_LENGTH: usize = 12; //how long r nonces lol TODO
+const KEY_LENGTH: usize = 32; // 32 bytes long, 256 bits
+
 // implement enumerator for ensuring proper error handling for different option types
-// #[derive(Debug)]
-// pub enum EncryptionError {
-//     Io(std::io::Error),
-//     Aead(aes_gcm::Error),
-//     InvalidKeyLength(String),
-//     InvalidNonceLength(String),
-//     PathHandling(String),
-//     FileNameExtraction,
-//     FileStemExtraction,
-//     FileExtensionExtraction,
-//     Utf8Conversion,
-//     InputFileNotAFile,
-//     InputFileNotFound,
-//     OutputDirectoryError(String),
-// }
+#[derive(Debug)]
+pub enum EncryptionError {
+    Io(std::io::Error),
+    Aead(aes_gcm::Error),
+    InvalidKeyLength(String),
+    InvalidNonceLength(String),
+    PathHandling(String),
+    FileNameExtraction,
+    FileStemExtraction,
+    FileExtensionExtraction,
+    Utf8Conversion,
+    InputFileNotAFile,
+    InputFileNotFound,
+    OutputDirectoryError(String),
+    Argon2(argon2::Error),
+}
 
-// // implement display trait
-// impl std::fmt::Display for EncryptionError {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         match self {
-//             EncryptionError::Io(e) => write!(f, "IO error: {}", e),
-//             EncryptionError::Aead(e) => write!(f, "AEAD (Decryption) error: {}", e),
-//             EncryptionError::InvalidKeyLength(s) => write!(f, "Invalid key length: {}", s),
-//             EncryptionError::InvalidNonceLength(s) => write!(f, "Invalid nonce length: {}", s),
-//             EncryptionError::PathHandling(s) => write!(f, "Path handling error: {}", s),
-//             EncryptionError::FileNameExtraction => write!(f, "Could not extract filename."),
-//             EncryptionError::FileStemExtraction => write!(f, "Could not extract file stem."),
-//             EncryptionError::FileExtensionExtraction => write!(f, "Could not extract file extension."),
-//             EncryptionError::Utf8Conversion => write!(f, "Filename, stem, or extension is not valid UTF-8."),
-//             EncryptionError::InputFileNotAFile => write!(f, "Input path is not a file."),
-//             EncryptionError::InputFileNotFound => write!(f, "Input file not found."),
-//             EncryptionError::OutputDirectoryError(s) => write!(f, "Output directory error: {}", s),
-//         }
-//     }
-// }
+// implement display trait
+impl std::fmt::Display for EncryptionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EncryptionError::Io(e) => write!(f, "IO error: {}", e),
+            EncryptionError::Aead(e) => write!(f, "AEAD (Decryption) error: {}", e),
+            EncryptionError::InvalidKeyLength(s) => write!(f, "Invalid key length: {}", s),
+            EncryptionError::InvalidNonceLength(s) => write!(f, "Invalid nonce length: {}", s),
+            EncryptionError::PathHandling(s) => write!(f, "Path handling error: {}", s),
+            EncryptionError::FileNameExtraction => write!(f, "Could not extract filename."),
+            EncryptionError::FileStemExtraction => write!(f, "Could not extract file stem."),
+            EncryptionError::FileExtensionExtraction => write!(f, "Could not extract file extension."),
+            EncryptionError::Utf8Conversion => write!(f, "Filename, stem, or extension is not valid UTF-8."),
+            EncryptionError::InputFileNotAFile => write!(f, "Input path is not a file."),
+            EncryptionError::InputFileNotFound => write!(f, "Input file not found."),
+            EncryptionError::OutputDirectoryError(s) => write!(f, "Output directory error: {}", s),
+            EncryptionError::Argon2(e) => write!(f, "Key derivation error: {}", e),
+        }
+    }
+}
 
-// impl std::error::Error for EncryptionError {
-//     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-//         match self {
-//             EncryptionError::Io(e) => Some(e),
-//             EncryptionError::Aead(e) => Some(e),
-//             _ => None,
-//         }
-//     }
-// }
+impl std::error::Error for EncryptionError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            EncryptionError::Io(e) => Some(e),
+            EncryptionError::Aead(e) => Some(e),
+            // EncryptionError::Argon2(e) => Some(e), // why not work? TODO
+            _ => None,
+        }
+    }
+}
 
-// impl From<std::io::Error> for EncryptionError {
-//     fn from(err: std::io::Error) -> EncryptionError {
-//         EncryptionError::Io(err)
-//     }
-// }
+impl From<std::io::Error> for EncryptionError {
+    fn from(err: std::io::Error) -> EncryptionError {
+        EncryptionError::Io(err)
+    }
+}
 
-// impl From<aes_gcm::Error> for EncryptionError {
-//     fn from(err: aes_gcm::Error) -> EncryptionError {
-//         EncryptionError::Aead(err)
-//     }
-// }
+impl From<aes_gcm::Error> for EncryptionError {
+    fn from(err: aes_gcm::Error) -> EncryptionError {
+        EncryptionError::Aead(err)
+    }
+}
+
+impl From<argon2::Error> for EncryptionError {
+    fn from(err: argon2::Error) -> EncryptionError {
+        EncryptionError::Argon2(err)
+    }
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("--- File Encryption/Decryption Tool ---");
@@ -121,15 +134,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    let mut key_bytes: Vec<u8> = Vec::new();
+    // TODO: THIS SHOULD COME AFTER LET PASSWORD
+    let mut key_bytes = [0u8; KEY_LENGTH]; // should this be a vec instead?
     let mut nonce_bytes: Vec<u8> = Vec::new();
+    let mut salt_bytes: Vec<u8> = Vec::new();
+    let mut password_bytes: Vec<u8> = Vec::new();
 
     // if decrypt, interpret key and nonce
-    if operation == "decrypt" {
-        let key_input = Some(read_user_input("Please enter the key for decryption (Hex/Base64): "));
-        let nonce_input = Some(read_user_input("Please enter the nonce for decryption (Hex/Base64): "));
+    let password = Some(read_user_input("Please enter the password: "));
+    
+    if let Some(n) = &password {
+        password_bytes = n.into_bytes();
+    }
 
-        // decode key & nonce
+        // decode key & nonce DONT NEED THIS TODO
         if let Some(n) = &nonce_input {
             nonce_bytes = if n.len() == 24 && n.chars().all(|c| c.is_ascii_hexdigit()) {
                 println!("Attempting to decode nonce as hex");
@@ -148,7 +166,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 general_purpose::STANDARD.decode(k)?
             };
         }
-    }
     
     // define variables to track directories
     let original_file: &PathBuf = &file_path;
@@ -156,6 +173,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let base_name = original_name.rsplit_once('.').map_or(original_name, |(base, _ext)| base).to_string();
     let name_combined: String = format!("encryption_{}", base_name);
     let name_without_extension: &str = &name_combined;
+
+    if operation == "decrypt" {
+        // if operation is decrypt, locate first 16 and parse them into nonce_base64, then convert that into nonce-bytes
+        // read out all bytes of the nonce at the beginning of the file
+            // better to do this here or once file has already been assigned a variable and stuff? 
+        let mut temp_file: std::fs::File = std::fs::File::open(file_path)?;
+        let mut nonce_buffer = [0u8; NONCE_LENGTH]; // is 16 correct here? should this be 0u8 or u8?
+        let nonce_base64_result = temp_file.take(12).read_exact(&mut nonce_buffer)?;
+        nonce_bytes = nonce_buffer.to_vec();
+
+        // if operation is decrypt, locate the salt, which should come directly after the nonce 
+        let mut salt_buffer = [0u8; SALT_LENGTH];
+        let salt_base64_result = temp_file.take(16).read_exact(&mut salt_buffer)?;
+        salt_bytes = salt_buffer.to_vec();
+
+        // take password and salt then derive vec<u8> key
+        let mut key_from_pass: [u8; KEY_LENGTH];
+        Argon2::default().hash_password_into(&password_bytes, &salt_bytes, &mut key_from_pass)?;
+    }
 
     // check for existence of documents folder
     let mut directory = match dirs::document_dir() {

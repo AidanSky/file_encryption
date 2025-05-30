@@ -15,11 +15,30 @@ implement error handling when trying to write/read code during encryption, if it
 
 understand the moon magic of types traits and implements
 
+TODO FOR TOMORROW:
+1. Change nonce to just be raw bytes
+2. include salt detector for decryption, should be 16 bytes after the 12 nonce bytes
+3. create the password input --> key
+
+encryption:
+1. create the salt creation function
+2. create the password+salt = key function
+    salt should be initialized as a vec<u8> of size 16 
+3. put salt and nonce bytes at beginning of encrypted file
 
 
+make as website
+    temp file sharing? Like, upload a file for next hour (discord server link + mediafire hybrid)
+add pgp
 
 PASSWORD BASED KEY
 1. change CLI interface so it asks for a password instead of a key for both
     if encryption, derive key from password and then initiate encryption function
     if decryption, same thing?
 2. finish function 
+
+NONCE:
+get rid of nonce: include as first x amount of characters when encrypting 
+if operation is encrypt, add to beginning of file when new encrypted file has been created
+
+if encryption, create a salt and stuff and use it and stuff
