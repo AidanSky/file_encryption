@@ -83,7 +83,7 @@ impl From<argon2::Error> for EncryptionError {
     }
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), EncryptionError> {
     println!("--- File Encryption/Decryption Tool ---");
 
     let file_path = loop {
@@ -134,40 +134,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    // TODO: THIS SHOULD COME AFTER LET PASSWORD
-    let mut key_bytes = [0u8; KEY_LENGTH]; // should this be a vec instead?
-    let mut nonce_bytes: Vec<u8> = Vec::new();
-    let mut salt_bytes: Vec<u8> = Vec::new();
-    let mut password_bytes: Vec<u8> = Vec::new();
-
     // if decrypt, interpret key and nonce
     let password = Some(read_user_input("Please enter the password: "));
     
     if let Some(n) = &password {
         password_bytes = n.into_bytes();
     }
-
-        // decode key & nonce DONT NEED THIS TODO
-        if let Some(n) = &nonce_input {
-            nonce_bytes = if n.len() == 24 && n.chars().all(|c| c.is_ascii_hexdigit()) {
-                println!("Attempting to decode nonce as hex");
-                hex::decode(n)?
-            } else {
-                println!("Attempting to decode nonce as base64");
-                general_purpose::STANDARD.decode(n)?
-            };
-        };
-        if let Some(k) = &key_input {
-            key_bytes = if k.len() == 64 && k.chars().all(|c| c.is_ascii_hexdigit()) {
-                println!("Attempting to decode key as hex");
-                hex::decode(k)?
-            } else {
-                println!("Attempting to decode key as base64");
-                general_purpose::STANDARD.decode(k)?
-            };
-        }
     
     // define variables to track directories
+    let mut key_bytes = [0u8; KEY_LENGTH]; // should this be a vec instead?
+    let mut nonce_bytes: Vec<u8> = Vec::new();
+    let mut salt_bytes: Vec<u8> = Vec::new();
+    let mut password_bytes: Vec<u8> = Vec::new();
+
     let original_file: &PathBuf = &file_path;
     let original_name = file_path.file_name().unwrap_or_else(|| std::ffi::OsStr::new("")).to_str().unwrap_or(""); // needs to get rid of everything until after final /
     let base_name = original_name.rsplit_once('.').map_or(original_name, |(base, _ext)| base).to_string();
@@ -189,15 +168,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         salt_bytes = salt_buffer.to_vec();
 
         // take password and salt then derive vec<u8> key
-        let mut key_from_pass: [u8; KEY_LENGTH];
-        Argon2::default().hash_password_into(&password_bytes, &salt_bytes, &mut key_from_pass)?;
+        Argon2::default().hash_password_into(&password_bytes, &salt_bytes, &mut key_bytes)?;
     }
+
+    
 
     // check for existence of documents folder
     let mut directory = match dirs::document_dir() {
         Some(path) => path,
         None => {
-            return Err(Box::new(io::Error::new(io::ErrorKind::NotFound, "Could not find the documents directory.", )));
+            return Err(io::Error::new(io::ErrorKind::NotFound, "Could not find the documents directory.", ).into());
         }
     };
 
@@ -208,7 +188,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("encrypted_files found/created successfully");
         }
         Err(e) => {
-            return Err(Box::new(e));            
+            return Err(e.into());            
         }
     }
 
@@ -217,7 +197,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match std::fs::exists(&directory) {
         Ok(true) => {
-            return Err(Box::new(io::Error::new(io::ErrorKind::NotFound, "documents/encrypted_files/originalname already exists. Please move/delete the original to avoid overwriting data", )));  
+            return Err(io::Error::new(io::ErrorKind::NotFound, "documents/encrypted_files/originalname already exists. Please move/delete the original to avoid overwriting data", ).into());  
         }
         Ok(false) => {
             match std::fs::create_dir_all(&directory) {
@@ -225,12 +205,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("encrypted_files found/created successfully");
                 }
                 Err(e) => {
-                    return Err(Box::new(e));            
+                    return Err(e.into());            
                 }
             }            
         }
         Err(e) => {
-            return Err(Box::new(e));              
+            return Err(e.into());              
         }
     }
 
@@ -250,13 +230,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             decrypt(&original_file, &key_bytes, &directory, &nonce_bytes)?;
         }
         _ => { 
-            return Err(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Third argument must be either 'encrypt' or decrypt'")));
+            return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Third argument must be either 'encrypt' or decrypt'").into());
         }
     }
     Ok(())
 }
 
-fn decrypt(original_directory: &Path, key_bytes: &Vec<u8>, copy_directory: &Path, nonce_bytes: &Vec<u8>) -> Result<(), Box<dyn std::error::Error>> {    
+fn decrypt(original_directory: &Path, key_bytes: &Vec<u8>, copy_directory: &Path, nonce_bytes: &Vec<u8>) -> Result<(), EncryptionError> {    
     // convert vector of key and nonce to true nonce and key
     let key = Key::<Aes256Gcm>::from_slice(&key_bytes);
     let nonce = Nonce::from_slice(&nonce_bytes);
@@ -289,7 +269,7 @@ fn decrypt(original_directory: &Path, key_bytes: &Vec<u8>, copy_directory: &Path
     Ok(())
 }
 
-fn encrypt(original_directory: &Path, copy_directory: &Path) -> Result<(), Box<dyn std::error::Error>> { 
+fn encrypt(original_directory: &Path, copy_directory: &Path) -> Result<(), EncryptionError> { 
     // this should return 3 documents, one encrypted file, one nonce.txt, one key.txt
 
     // generate the nonce

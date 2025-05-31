@@ -19,12 +19,15 @@ TODO FOR TOMORROW:
 1. Change nonce to just be raw bytes
 2. include salt detector for decryption, should be 16 bytes after the 12 nonce bytes
 3. create the password input --> key
+4. DECRYPTION MUST REMOVE FIRST 16+12 bytes during decryption process
 
 encryption:
 1. create the salt creation function
 2. create the password+salt = key function
     salt should be initialized as a vec<u8> of size 16 
 3. put salt and nonce bytes at beginning of encrypted file
+4. delete thingy where it makes nonce.txt and key.txt
+5. Write generated nonce and salt into encrypted file
 
 
 make as website
