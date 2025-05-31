@@ -39,8 +39,8 @@ dirs = "5.0"
 
 1. **Clone the Repository**:
    ```bash
-   git clone <repository-url>
-   cd <repository-directory>
+   git clone https://github.com/AidanSky/file_encryption.git
+   cd file_encryption
    ```
 
 2. **Build the Program**:
