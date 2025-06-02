@@ -42,24 +42,36 @@ rpassword = "7.4.0"
 
 ## Usage
 
+## Usage
+
 1. **Clone the Repository**:
+
    ```bash
    git clone https://github.com/AidanSky/file_encryption.git
    cd file_encryption
    ```
 
 2. **Build the Program**:
+
    ```bash
    cargo build --release
    ```
 
 3. **Run the Program**:
-   ```bash
-   cargo run --release
-   ```
+
+   - Using Cargo:
+     ```bash
+     cargo run --release
+     ```
+
+   - Using the compiled binary:
+     ```bash
+     ./target/release/file_encryption
+     ```
 
 4. **Follow Prompts**:
-   - Enter the path to the file you want to encrypt or decrypt (e.g., `/path/to/file.txt`).
+
+   - Enter the path to the file you want to encrypt or decrypt (e.g., `/path/to/file.txt`). You can get this for a file by right clicking on it, then selecting 'Copy as path'.
    - Choose the operation: `e` for encryption or `d` for decryption.
    - Provide a password when prompted.
    - Choose whether or not you want the original file to be deleted.
