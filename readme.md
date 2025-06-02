@@ -42,8 +42,6 @@ rpassword = "7.4.0"
 
 ## Usage
 
-## Usage
-
 1. **Clone the Repository**:
 
    ```bash
