@@ -9,6 +9,7 @@ use aes_gcm::{
     Aes256Gcm, Nonce, Key
 };
 use argon2::Argon2;
+use rpassword;
 
 const SALT_LENGTH: usize = 16;
 const NONCE_LENGTH: usize = 12; //how long r nonces lol TODO
@@ -134,7 +135,8 @@ fn main() -> Result<(), EncryptionError> {
     };
 
     // if decrypt, interpret key and nonce
-    let password = Some(read_user_input("Please enter the password: "));
+    // let password = Some(read_user_input("Please enter the password: "));
+    let password = rpassword::prompt_password("Please enter the password: ")?;
 
     let delete_original: bool = loop {
         let input = read_user_input("Would you like the original file to be deleted? (y)es or (n)o: ");
@@ -158,11 +160,11 @@ fn main() -> Result<(), EncryptionError> {
     let mut key_bytes = [0u8; KEY_LENGTH]; // should this be a vec instead?
     let mut nonce_bytes = [0u8; NONCE_LENGTH];
     let mut salt_bytes = [0u8; SALT_LENGTH];
-    let mut password_bytes: Vec<u8> = Vec::new();
+    let password_bytes = password.as_bytes().to_vec();
 
-    if let Some(n) = &password {
-        password_bytes = n.as_bytes().to_vec();
-    }
+    // if let Some(n) = &password {
+    //     password_bytes = n.as_bytes().to_vec();
+    // }
 
     let original_file_path: &PathBuf = &file_path;
     let file_pathbuf = file_path.clone();
