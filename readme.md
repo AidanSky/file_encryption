@@ -5,7 +5,7 @@ This Rust program provides a command-line interface for encrypting and decryptin
 Currently, main.rs is non-functioning as I am making several significant changes. In the future, I plan for this to be a secure web app. 
 ogversion.rs is functioning, so you can use that if you would like in the meantime.
 
-**CURRENTLY NOT SECURE!!! DO NOT USE EITHER MAIN.RS OR OGVERSION.RS TO STORE ANYTHING THAT DEMANDS GENUINE SECURITY**
+**CURRENTLY NOT SECURE!!! DO NOT USE EITHER MAIN.RS OR OGVERSION.RS TO STORE ANYTHING THAT DEMANDS GENUINE SECURITY. OGVERSION.RS STORES BOTH THE KEY AND NONCE IN PLAINTEXT (BAD!!!) AND NEITHER ARE BATTLE-TESTED AT ALL!!!**
 
 ## Features
 
@@ -39,8 +39,8 @@ dirs = "5.0"
 
 1. **Clone the Repository**:
    ```bash
-   git clone <repository-url>
-   cd <repository-directory>
+   git clone https://github.com/AidanSky/file_encryption.git
+   cd file_encryption
    ```
 
 2. **Build the Program**:
