@@ -2,13 +2,12 @@ use std::io::prelude::*;
 use std::io;
 use std::path::Path;
 use std::path::PathBuf;
+use aes_gcm::aes::Aes256;
 // use aes_gcm::AesGcm;
 use aes_gcm::{
-    aead::{Aead, AeadCore, KeyInit, OsRng},
+    aead::{Aead, AeadCore, KeyInit, OsRng, rand_core::RngCore},
     Aes256Gcm, Nonce, Key
 };
-use hex;
-use base64::{engine::general_purpose, Engine as _};
 use argon2::Argon2;
 
 const SALT_LENGTH: usize = 16;
@@ -136,42 +135,47 @@ fn main() -> Result<(), EncryptionError> {
 
     // if decrypt, interpret key and nonce
     let password = Some(read_user_input("Please enter the password: "));
-    
-    if let Some(n) = &password {
-        password_bytes = n.into_bytes();
-    }
+
+    let delete_original: bool = loop {
+        let input = read_user_input("Would you like the original file to be deleted? (y)es or (n)o: ");
+
+        match input.trim().to_lowercase().as_str() {
+            "y" | "yes" => {
+                println!("The original file will be deleted.");
+                break true;
+            }
+            "n" | "no" => {
+                println!("The original file will be kept.");
+                break false;
+            }
+            _ => {
+                println!("Please enter either 'y' or 'n'.");
+            }
+        }
+    };
     
     // define variables to track directories
     let mut key_bytes = [0u8; KEY_LENGTH]; // should this be a vec instead?
-    let mut nonce_bytes: Vec<u8> = Vec::new();
-    let mut salt_bytes: Vec<u8> = Vec::new();
+    let mut nonce_bytes = [0u8; NONCE_LENGTH];
+    let mut salt_bytes = [0u8; SALT_LENGTH];
     let mut password_bytes: Vec<u8> = Vec::new();
 
-    let original_file: &PathBuf = &file_path;
-    let original_name = file_path.file_name().unwrap_or_else(|| std::ffi::OsStr::new("")).to_str().unwrap_or(""); // needs to get rid of everything until after final /
-    let base_name = original_name.rsplit_once('.').map_or(original_name, |(base, _ext)| base).to_string();
-    let name_combined: String = format!("encryption_{}", base_name);
-    let name_without_extension: &str = &name_combined;
-
-    if operation == "decrypt" {
-        // if operation is decrypt, locate first 16 and parse them into nonce_base64, then convert that into nonce-bytes
-        // read out all bytes of the nonce at the beginning of the file
-            // better to do this here or once file has already been assigned a variable and stuff? 
-        let mut temp_file: std::fs::File = std::fs::File::open(file_path)?;
-        let mut nonce_buffer = [0u8; NONCE_LENGTH]; // is 16 correct here? should this be 0u8 or u8?
-        let nonce_base64_result = temp_file.take(12).read_exact(&mut nonce_buffer)?;
-        nonce_bytes = nonce_buffer.to_vec();
-
-        // if operation is decrypt, locate the salt, which should come directly after the nonce 
-        let mut salt_buffer = [0u8; SALT_LENGTH];
-        let salt_base64_result = temp_file.take(16).read_exact(&mut salt_buffer)?;
-        salt_bytes = salt_buffer.to_vec();
-
-        // take password and salt then derive vec<u8> key
-        Argon2::default().hash_password_into(&password_bytes, &salt_bytes, &mut key_bytes)?;
+    if let Some(n) = &password {
+        password_bytes = n.as_bytes().to_vec();
     }
 
-    
+    let original_file_path: &PathBuf = &file_path;
+    let file_pathbuf = file_path.clone();
+    let original_name = file_pathbuf.file_name().unwrap_or_else(|| std::ffi::OsStr::new("")).to_str().unwrap_or(""); // is thisn ecessary? needs to get rid of everything until after final /
+    let base_name = original_name.rsplit_once('.').map_or(original_name, |(base, _ext)| base).to_string();
+    let mut _name_combined = String::new();
+    if operation == "encrypt" {
+        _name_combined = format!("encrypted_{}", base_name);
+    } else {
+        _name_combined = format!("decrypted_{}", base_name);        
+    }
+
+    let name_without_extension: &str = &_name_combined;
 
     // check for existence of documents folder
     let mut directory = match dirs::document_dir() {
@@ -185,7 +189,7 @@ fn main() -> Result<(), EncryptionError> {
     directory.push("encrypted_files");
     match std::fs::create_dir_all(&directory) {
         Ok(_) => {
-            println!("encrypted_files found/created successfully");
+            println!("encrypted_files folder found/created successfully");
         }
         Err(e) => {
             return Err(e.into());            
@@ -202,7 +206,7 @@ fn main() -> Result<(), EncryptionError> {
         Ok(false) => {
             match std::fs::create_dir_all(&directory) {
                 Ok(_) => {
-                    println!("encrypted_files found/created successfully");
+                    println!("{:?} folder created successfully", name_without_extension);
                 }
                 Err(e) => {
                     return Err(e.into());            
@@ -218,16 +222,48 @@ fn main() -> Result<(), EncryptionError> {
     match operation {
         "encrypt" => { 
             println!("initiating encryption function");
-        // launch into encryption function (create encrypted file after returned or in function?)
+            // launch into encryption function (create encrypted file after returned or in function?)
             // println!("The original file is: {:?}", original_file);
             // println!("The new directory is: {:?}", directory);
-            encrypt(&original_file, &directory)?;
+
+            // create salt //should this be done in the function instead?
+            OsRng.fill_bytes(&mut salt_bytes);
+
+            // initialize key based on salt and password
+            Argon2::default().hash_password_into(&password_bytes, &salt_bytes, &mut key_bytes)?;
+
+            encrypt(&original_file_path, &directory, delete_original, &key_bytes, salt_bytes)?;
         }
         "decrypt" => {
             println!("initiating decryption function");
 
+            // if operation is decrypt, locate first 16 and parse them into nonce_base64, then convert that into nonce-bytes
+            // read out all bytes of the nonce at the beginning of the file
+                // better to do this here or once file has already been assigned a variable and stuff? 
+            let temp_file: std::fs::File = std::fs::File::open(file_path.clone())?;
+            let mut byte_theft = [0u8; SALT_LENGTH+NONCE_LENGTH];
+            let pre_entry: u64 = byte_theft.len() as u64;
+            // let mut nonce_buffer = [0u8; NONCE_LENGTH]; // is 16 correct here? should this be 0u8 or u8?
+            // let nonce_base64_result = temp_file.take(12).read_exact(&mut nonce_bytes)?;
+            let mut header_reader = (&temp_file).take(pre_entry);
+            header_reader.read_exact(&mut byte_theft)?;
+            // nonce_bytes = nonce_buffer;
+
+            nonce_bytes.copy_from_slice(&byte_theft[0..NONCE_LENGTH]);
+            salt_bytes.copy_from_slice(&byte_theft[NONCE_LENGTH..(NONCE_LENGTH + SALT_LENGTH)]);
+
+            // if operation is decrypt, locate the salt, which should come directly after the nonce 
+            // let mut salt_buffer = [0u8; SALT_LENGTH];
+            // let salt_base64_result = temp_file.take(16).read_exact(&mut salt_bytes)?;
+            // temp_file.take(16).read_exact(&mut salt_bytes)?;
+            // salt_bytes = salt_buffer; //TODO this is an unncessary conversion
+
+            // take password and salt then derive vec<u8> key
+            Argon2::default().hash_password_into(&password_bytes, &salt_bytes, &mut key_bytes)?;
+
             // launch into decryption function
-            decrypt(&original_file, &key_bytes, &directory, &nonce_bytes)?;
+            // TODO should passwords outside of size ;32 be allowed? 
+            decrypt(&original_file_path, &temp_file, &key_bytes, &directory, nonce_bytes, delete_original)?;
         }
         _ => { 
             return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Third argument must be either 'encrypt' or decrypt'").into());
@@ -236,9 +272,9 @@ fn main() -> Result<(), EncryptionError> {
     Ok(())
 }
 
-fn decrypt(original_directory: &Path, key_bytes: &Vec<u8>, copy_directory: &Path, nonce_bytes: &Vec<u8>) -> Result<(), EncryptionError> {    
+fn decrypt(original_directory: &Path, mut original_file: &std::fs::File, key_bytes: &[u8; KEY_LENGTH], copy_directory: &Path, nonce_bytes: [u8; NONCE_LENGTH], delete_original: bool) -> Result<(), EncryptionError> {    
     // convert vector of key and nonce to true nonce and key
-    let key = Key::<Aes256Gcm>::from_slice(&key_bytes);
+    let key = Key::<Aes256Gcm>::from_slice(key_bytes);
     let nonce = Nonce::from_slice(&nonce_bytes);
 
     // define file name from path
@@ -248,9 +284,12 @@ fn decrypt(original_directory: &Path, key_bytes: &Vec<u8>, copy_directory: &Path
     let cipher = Aes256Gcm::new(&key);
 
     // read the file into a Vec<u8>
-    let original_vec: Vec<u8> = std::fs::read(original_directory)?;
+    // let original_vec: Vec<u8> = std::fs::read(original_directory)?;
+    // Does this already have the first 16+12 bytes ignored?
+    let mut original_vec: Vec<u8> = Vec::new();
+    original_file.read_to_end(&mut original_vec)?;
 
-    // encrypt the Vec<u8>
+    // decrypt the Vec<u8>
     let decrypted_vec: Vec<u8> = cipher.decrypt(&nonce, original_vec.as_ref())?;
 
     // create directory for new file
@@ -266,23 +305,26 @@ fn decrypt(original_directory: &Path, key_bytes: &Vec<u8>, copy_directory: &Path
         .open(&decrypted_file_dir_buf)?;
     decrypted_file.write_all(decrypted_vec.as_slice())?;
 
+    if delete_original {
+        std::fs::remove_file(original_directory)?;
+        println!("Successfully removed {:?}", original_directory);
+    }
+
+    println!("Decryption function succeeded sucessfully");
+
     Ok(())
 }
 
-fn encrypt(original_directory: &Path, copy_directory: &Path) -> Result<(), EncryptionError> { 
+fn encrypt(original_directory: &Path, copy_directory: &Path, delete_original: bool, key_bytes: &[u8; KEY_LENGTH], salt_bytes: [u8; SALT_LENGTH]) -> Result<(), EncryptionError> { 
     // this should return 3 documents, one encrypted file, one nonce.txt, one key.txt
 
     // generate the nonce
     let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
-    let key = Aes256Gcm::generate_key(OsRng); // key is created randomly. Maybe let user pick their own? 
+    // let key = Aes256Gcm::generate_key(OsRng); // key is created randomly. Maybe let user pick their own? 
+    let key = Key::<Aes256>::from_slice(key_bytes);
 
-    // define hex and base64 versions of the nonce:
-    let nonce_hex = hex::encode(nonce);
-    let nonce_base64 = general_purpose::STANDARD.encode(nonce);
-
-    // define hex and base64 versions of the key: 
-    let key_hex = hex::encode(key);
-    let key_base64 = general_purpose::STANDARD.encode(key);
+    // define salt in scope
+    let salt = salt_bytes;
 
     // define file name from path
     let original_name = original_directory.file_name().unwrap_or_else(|| std::ffi::OsStr::new("")).to_str().unwrap_or("");
@@ -291,10 +333,19 @@ fn encrypt(original_directory: &Path, copy_directory: &Path) -> Result<(), Encry
     let cipher = Aes256Gcm::new(&key);
 
     // read the file into a Vec<u8>
-    let original_vec: Vec<u8> = std::fs::read(original_directory)?;
+    // let original_vec: Vec<u8> = std::fs::read(original_directory)?;
+    let mut original_vec: Vec<u8> = Vec::new();
+    original_vec.extend_from_slice(&nonce);
+    original_vec.extend_from_slice(&salt);
+
+    // define the vec for the original file, to be encrypted then appended
+    let original_file_vec: Vec<u8> = std::fs::read(original_directory)?;
+    // original_vec.append(&mut original_file_vec);
+
+    let mut encrypted_file_vec: Vec<u8> = cipher.encrypt(&nonce, original_file_vec.as_ref())?;
 
     // encrypt the Vec<u8>
-    let encrypted_vec: Vec<u8> = cipher.encrypt(&nonce, original_vec.as_ref())?;
+    original_vec.append(&mut encrypted_file_vec);
 
     // create directory for new file
         // define new string to push onto the copy_directory
@@ -307,32 +358,14 @@ fn encrypt(original_directory: &Path, copy_directory: &Path) -> Result<(), Encry
         .create(true)
         .append(true)
         .open(&encrypted_file_dir_buf)?;
-    encrypted_file.write_all(encrypted_vec.as_slice())?;
-    
-    // create key.txt, nonce.txt, and actually encrypt the file, then creat encrytped_file
-    let key_path = copy_directory.join("key.txt");
-    let mut key_file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&key_path)?;
+    encrypted_file.write_all(original_vec.as_slice())?;
 
-    key_file.write_all("Key (Hex): ".as_bytes())?;
-    key_file.write_all(key_hex.as_bytes())?;
-    key_file.write_all(b"\n")?;
-    key_file.write_all("Key (Base64): ".as_bytes())?;
-    key_file.write_all(key_base64.as_bytes())?;
+    if delete_original {
+        std::fs::remove_file(original_directory)?;
+        println!("Successfully removed {:?}", original_directory);
+    }
 
-    let nonce_path = copy_directory.join("nonce.txt");
-    let mut nonce_file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&nonce_path)?;
-
-    nonce_file.write_all("Nonce (Hex): ".as_bytes())?;
-    nonce_file.write_all(nonce_hex.as_bytes())?;
-    nonce_file.write_all(b"\n")?;
-    nonce_file.write_all("Nonce (Base64): ".as_bytes())?;
-    nonce_file.write_all(nonce_base64.as_bytes())?;
+    println!("Encryption completed successfully! Check documents/encrypted_items");
 
     Ok(())
 }
