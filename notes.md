@@ -64,3 +64,5 @@ Next: Work on encryption function, verify that .take() works as expected and tha
 add error handling for if the original file or folder already exists
 
 way to hide the file type?
+
+cleanup notes in function

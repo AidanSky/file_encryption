@@ -6,7 +6,7 @@ This Rust program provides a command-line interface for encrypting and decryptin
 
 ## Features
 
-- **Encryption**: Encrypts a specified file using AES-256-GCM, generating a random key and nonce.
+- **Encryption**: Encrypts a specified file using AES-256-GCM based on a user-selected password, generating a key, nonce and salt.
 - **Decryption**: Decrypts a file using a provided password, nonce, and salt.
 - **Secure Key Derivation**: Uses Argon2 for deriving encryption keys from passwords during decryption.
 - **File Management**: Stores encrypted files, keys, and nonces in a dedicated `encrypted_files` directory within the user's documents folder.
@@ -71,8 +71,8 @@ rpassword = "7.4.0"
 
    - Enter the path to the file you want to encrypt or decrypt (e.g., `/path/to/file.txt`). You can get this for a file by right clicking on it, then selecting 'Copy as path'.
    - Choose the operation: `e` for encryption or `d` for decryption.
-   - Provide a password when prompted.
    - Choose whether or not you want the original file to be deleted.
+   - Provide a password when prompted.
 
 ## Operation Details
 

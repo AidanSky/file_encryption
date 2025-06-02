@@ -134,10 +134,6 @@ fn main() -> Result<(), EncryptionError> {
         }
     };
 
-    // if decrypt, interpret key and nonce
-    // let password = Some(read_user_input("Please enter the password: "));
-    let password = rpassword::prompt_password("Please enter the password: ")?;
-
     let delete_original: bool = loop {
         let input = read_user_input("Would you like the original file to be deleted? (y)es or (n)o: ");
 
@@ -155,6 +151,10 @@ fn main() -> Result<(), EncryptionError> {
             }
         }
     };
+
+    // if decrypt, interpret key and nonce
+    // let password = Some(read_user_input("Please enter the password: "));
+    let password = rpassword::prompt_password("Please enter the password: ")?;
     
     // define variables to track directories
     let mut key_bytes = [0u8; KEY_LENGTH]; // should this be a vec instead?
